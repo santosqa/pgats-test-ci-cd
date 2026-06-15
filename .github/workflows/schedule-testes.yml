@@ -25,3 +25,6 @@ jobs:
     with:
       debug: false
     secrets: inherit
+    steps:
+      - name: Imprimir mensagem de depuração
+        run: echo "Workflow de teste agendado!"

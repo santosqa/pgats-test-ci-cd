@@ -115,7 +115,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
         run: |
-          if [ "$TEST_RESULT" = "success" ] && [ "$BUILD_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
+          if [ "$TEST_RESULT" = "✅ success" ] && [ "$BUILD_RESULT" = "✅ success" ] && [ "$DEPLOY_RESULT" = "✅ success" ]; then
             OVERALL_STATUS="PASSOU ✅"
             OVERALL_ICON="✅"
           else

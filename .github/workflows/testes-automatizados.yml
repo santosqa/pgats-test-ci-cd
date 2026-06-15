@@ -32,6 +32,17 @@ on:
         description: 'Resultado geral (success/failure)'
         value: ${{ jobs.test.outputs.overall_result }}
 
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Ativar modo verbose extra'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
 permissions:
   contents: read
   checks: write

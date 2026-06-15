@@ -180,9 +180,9 @@ jobs:
             echo "URL publicada: $PAGE_URL_TXT"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: 📧 Enviar e-mail de status (único)
+      - name: 📧 Enviar e-mail de status
         if: env.RECIPIENT != ''
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v4
         with:
           server_address: ${{ secrets.SMTP_HOST }}
           server_port: ${{ secrets.SMTP_PORT }}

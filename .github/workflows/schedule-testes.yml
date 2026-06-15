@@ -8,11 +8,10 @@
 name: 🕘 Schedule - Testes Automatizados
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
-    - cron: '23 16 * 6 1-3'
-
   workflow_dispatch:
+
+  schedule:
+    - cron: '*/9 * * * *'
 
 permissions:
   contents: read

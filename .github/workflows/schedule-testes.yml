@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: '36 19 * * 0,1,3'   # Dom, Seg e Qua
+    #Roda a cada 30 minutos
+    - cron: '*/30 * * * *'
+
+    #Roda toda sexta-feira à meia noite
+    - cron: '0 0 * * 5'
 
 permissions:
   contents: read

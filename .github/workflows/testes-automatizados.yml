@@ -31,6 +31,12 @@ on:
       overall_result:
         description: "Resultado geral (success/failure)"
         value: ${{ jobs.test.outputs.overall_result }}
+      total_tests:
+        description: "Total de testes executados"
+        value: ${{ jobs.test.outputs.total_tests }}
+      total_failures:
+        description: "Total de falhas"
+        value: ${{ jobs.test.outputs.total_failures }}
 
   workflow_dispatch:
     inputs:

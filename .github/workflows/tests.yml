@@ -10,6 +10,17 @@
 name: 🧪 Testes Automatizados
 
 on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Ativar modo verbose extra"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
   push:
     branches:
       - main
@@ -20,24 +31,9 @@ on:
       - main
       - develop
 
-  # Execução manual pelo GitHub UI ou API
-  workflow_dispatch:
-    inputs:
-      debug:
-        description: 'Ativar modo verbose extra'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-
-  schedule:
-    - cron: '*/5 * * * *'
-    # 23:20 UTC = 20:20 Horário de Brasília
-    # Dias: 0 (Domingo), 1 (Segunda), 3 (Quarta)
-    # Mês: 6 (Junho) (Deixei execução apenas no mes 6. pois se eu esquecer de desligar após validação do trabalho, a partir do mês seguinte ele não executa mais, evitando execuções indesejadas no futuro. Até chegar mes 6 de 2027 kkk )
-  
+  # schedule:
+  #   # teste temporário: a cada 15 minutos
+  #   - cron: "*/15 * * * *"
 
 # ── Permissões mínimas necessárias ────────────────────────────────────────────
 permissions:
@@ -59,11 +55,11 @@ jobs:
     steps:
       # 1. Código-fonte
       - name: 📥 Checkout código
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       # 2. Ambiente Node.js com cache automático do npm
       - name: 🟢 Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
@@ -144,7 +140,7 @@ jobs:
       #    Retidos por 30 dias; baixáveis na aba "Artifacts" da execução
       - name: 📁 Upload artefatos de teste
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: test-report-${{ github.run_number }}
           path: |

@@ -17,31 +17,31 @@ on:
   workflow_call:
     inputs:
       debug:
-        description: 'Ativar modo verbose extra'
+        description: "Ativar modo verbose extra"
         required: false
         default: false
         type: boolean
     outputs:
       unit_outcome:
-        description: 'Resultado dos testes unitários (success/failure)'
+        description: "Resultado dos testes unitários (success/failure)"
         value: ${{ jobs.test.outputs.unit_outcome }}
       functional_outcome:
-        description: 'Resultado dos testes funcionais (success/failure)'
+        description: "Resultado dos testes funcionais (success/failure)"
         value: ${{ jobs.test.outputs.functional_outcome }}
       overall_result:
-        description: 'Resultado geral (success/failure)'
+        description: "Resultado geral (success/failure)"
         value: ${{ jobs.test.outputs.overall_result }}
 
   workflow_dispatch:
     inputs:
       debug:
-        description: 'Ativar modo verbose extra'
+        description: "Ativar modo verbose extra"
         required: false
-        default: 'false'
+        default: "false"
         type: choice
         options:
-          - 'true'
-          - 'false'
+          - "true"
+          - "false"
 
 permissions:
   contents: read
@@ -56,6 +56,8 @@ jobs:
       unit_outcome: ${{ steps.unit_tests.outcome }}
       functional_outcome: ${{ steps.functional_tests.outcome }}
       overall_result: ${{ steps.final_result.outputs.result }}
+      total_tests: ${{ steps.metrics.outputs.total_tests }}
+      total_failures: ${{ steps.metrics.outputs.total_failures }}
 
     steps:
       - name: 📥 Checkout código
@@ -64,8 +66,8 @@ jobs:
       - name: 🟢 Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
 
       - name: 📦 Instalar dependências
         run: npm ci
@@ -82,15 +84,15 @@ jobs:
           if [ "${{ inputs.debug }}" = "true" ]; then EXTRA="--verbose"; fi
           npm run test:unit:ci -- --runInBand $EXTRA
         env:
-          JEST_JUNIT_OUTPUT_DIR: '.'
-          JEST_JUNIT_OUTPUT_NAME: 'junit.xml'
+          JEST_JUNIT_OUTPUT_DIR: "."
+          JEST_JUNIT_OUTPUT_NAME: "junit.xml"
 
       - name: 📋 Publicar relatório de testes (Test Reporter)
         if: always()
         uses: dorny/test-reporter@v3
         with:
-          name: 'Relatório Jest'
-          path: 'junit.xml'
+          name: "Relatório Jest"
+          path: "junit.xml"
           reporter: jest-junit
           fail-on-error: false
 
@@ -115,8 +117,8 @@ jobs:
         if: always()
         uses: dorny/test-reporter@v3
         with:
-          name: 'Relatório Playwright'
-          path: 'reports/functional-junit.xml'
+          name: "Relatório Playwright"
+          path: "reports/functional-junit.xml"
           reporter: java-junit
           fail-on-error: false
 
@@ -127,6 +129,16 @@ jobs:
           FUNCTIONAL_OUTCOME: ${{ steps.functional_tests.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/ci_test_summary.js
+
+      - name: 📊 Coletar métricas
+        id: metrics
+        if: always()
+        run: |
+          TOTAL_TESTS=$(grep -o 'tests="[0-9]*"' junit.xml | head -1 | grep -o '[0-9]*')
+          TOTAL_FAILURES=$(grep -o 'failures="[0-9]*"' junit.xml | head -1 | grep -o '[0-9]*')
+
+          echo "total_tests=${TOTAL_TESTS:-0}" >> $GITHUB_OUTPUT
+          echo "total_failures=${TOTAL_FAILURES:-0}" >> $GITHUB_OUTPUT
 
       - name: 📁 Upload artefatos de teste
         if: always()

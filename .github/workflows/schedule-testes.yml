@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: '*/9 * * * *'
+    - cron: '*/15 * * * *'
 
 permissions:
   contents: read
@@ -25,6 +25,15 @@ jobs:
     with:
       debug: false
     secrets: inherit
+
+  debug:
+    name: 🔍 Depuração
+    runs-on: ubuntu-latest
+    needs: run-tests
+    if: always()
     steps:
       - name: Imprimir mensagem de depuração
-        run: echo "Workflow de teste agendado!"
+        run: |
+          echo "Workflow de teste agendado!"
+          echo "Horário de execução: $(date -u)"
+          echo "Resultado dos testes: ${{ needs.run-tests.result }}"

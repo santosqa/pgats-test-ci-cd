@@ -1,30 +1,31 @@
 name: 🕘 Schedule - Execução de Testes
 
-permissions:
-  contents: read
-  checks: write
-
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: '56 20 * * 0,1,3'   # Dom, Seg e Qua às 17:56 BRT (22:36 UTC)
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
-  trigger-tests:
+  run-tests:
+    name: 🧪 Executar suíte de testes (agendado)
+    uses: ./.github/workflows/testes-automatizados.yml
+    with:
+      debug: false
+    secrets: inherit
+
+  debug:
+    name: 🔍 Depuração
     runs-on: ubuntu-latest
+    needs: run-tests
+    if: always()
     steps:
-      - name: Disparar workflow principal
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'tests.yml',
-              ref: 'main',
-              inputs: {
-                debug: 'false'
-              }
-            })
+      - name: Imprimir resultado
+        run: |
+          echo "Horário de execução: $(date -u)"
+          echo "Resultado dos testes: ${{ needs.run-tests.result }}"

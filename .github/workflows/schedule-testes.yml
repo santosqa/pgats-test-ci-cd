@@ -1,17 +1,10 @@
-# ──────────────────────────────────────────────────────────────────────────────
-# Schedule — Execução de Testes
-#
-# Apenas o "cronômetro": dispara testes-automatizados.yml via workflow_call
-# nos horários configurados (cron em UTC). Não duplica steps de teste.
-# ──────────────────────────────────────────────────────────────────────────────
-
 name: 🕘 Schedule - Testes Automatizados
 
 on:
   workflow_dispatch:
 
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '36 19 * * 0,1,3'   # Dom, Seg e Qua
 
 permissions:
   contents: read
@@ -32,8 +25,7 @@ jobs:
     needs: run-tests
     if: always()
     steps:
-      - name: Imprimir mensagem de depuração
+      - name: Imprimir resultado
         run: |
-          echo "Workflow de teste agendado!"
           echo "Horário de execução: $(date -u)"
           echo "Resultado dos testes: ${{ needs.run-tests.result }}"

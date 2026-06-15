@@ -1,0 +1,201 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deploy — GitHub Pages
+#
+# Fluxo: testes (workflow_call) -> build -> deploy -> notify (e-mail único)
+#
+# - Se os testes falharem, build e deploy são "skipped" automaticamente
+#   (needs + condições padrão do GitHub Actions).
+# - O job "notify" sempre executa (if: always()) e envia UM ÚNICO e-mail
+#   com o resumo de todos os jobs anteriores.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: 🚀 Deploy — GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  checks: write
+  pull-requests: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # ── Job 1: Testes (reutiliza testes-automatizados.yml) ───────────────────
+  test:
+    name: 🧪 Testes
+    uses: ./.github/workflows/testes-automatizados.yml
+    with:
+      debug: false
+    secrets: inherit
+
+  # ── Job 2: Build ──────────────────────────────────────────────────────────
+  build:
+    name: 🔨 Build do site
+    runs-on: ubuntu-latest
+    needs: test
+    if: needs.test.outputs.overall_result == 'success'
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: 📦 Instalar dependências
+        run: npm ci
+
+      - name: 🐍 Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📂 Gerar catálogo de produtos
+        run: python3 scripts/build_catalog.py
+
+      - name: 🗂️ Preparar site estático
+        run: |
+          mkdir -p site
+          cp -R index.html styles.css app.js catalog.json products logos site/
+
+      - name: ⚙️ Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: 📤 Upload artefato Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # ── Job 3: Deploy ─────────────────────────────────────────────────────────
+  deploy:
+    name: 🌐 Publicar no GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 🚀 Deploy para GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ── Job 4: Notificação por e-mail (único, consolidado) ──────────────────────
+  notify:
+    name: 📧 Notificar resultado (e-mail único)
+    runs-on: ubuntu-latest
+    needs: [test, build, deploy]
+    if: always()
+    steps:
+      - name: 📊 Montar resumo e enviar e-mail
+        env:
+          # Resultados de cada job anterior (success / failure / skipped / cancelled)
+          TEST_RESULT: ${{ needs.test.outputs.overall_result || needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+          # Dados do repositório / execução
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SERVER_URL: ${{ github.server_url }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+        run: |
+          # Define ícone e status geral
+          if [ "$TEST_RESULT" = "success" ] && [ "$BUILD_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
+            echo "OVERALL_STATUS=PASSOU ✅" >> "$GITHUB_ENV"
+            echo "OVERALL_ICON=✅" >> "$GITHUB_ENV"
+          else
+            echo "OVERALL_STATUS=FALHOU ❌" >> "$GITHUB_ENV"
+            echo "OVERALL_ICON=❌" >> "$GITHUB_ENV"
+          fi
+
+          # Resolve destinatário: secret NOTIFICATION_EMAIL ou email público do owner
+          RECIPIENT="$NOTIFICATION_EMAIL"
+          if [ -z "$RECIPIENT" ]; then
+            RECIPIENT=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/users/$REPOSITORY_OWNER" | \
+              python3 -c "import sys, json; print(json.load(sys.stdin).get('email') or '')")
+          fi
+          echo "RECIPIENT=$RECIPIENT" >> "$GITHUB_ENV"
+
+          PAGE_URL_TXT="${PAGE_URL:-Não publicada nesta execução.}"
+          RUN_URL="$SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID"
+          COMMIT_SHORT="${COMMIT_SHA:0:7}"
+
+          # Corpo do e-mail (texto e HTML)
+          {
+            echo "EMAIL_BODY<<EOF"
+            echo "Status geral: $OVERALL_STATUS"
+            echo ""
+            echo "Repositório: $REPOSITORY"
+            echo "Execução: #$RUN_NUMBER"
+            echo "Trigger: $EVENT_NAME"
+            echo "Branch: $REF_NAME"
+            echo "Commit: $COMMIT_SHORT"
+            echo ""
+            echo "Resultado dos jobs:"
+            echo "  - Testes (unitários + funcionais): $TEST_RESULT"
+            echo "  - Build do site: $BUILD_RESULT"
+            echo "  - Deploy GitHub Pages: $DEPLOY_RESULT"
+            echo ""
+            echo "URL publicada: $PAGE_URL_TXT"
+            echo ""
+            echo "Relatório completo da execução:"
+            echo "$RUN_URL"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "EMAIL_SUBJECT=${OVERALL_ICON} Deploy GitHub Pages - $REPOSITORY #$RUN_NUMBER - $TEST_RESULT/$BUILD_RESULT/$DEPLOY_RESULT"
+          } >> "$GITHUB_ENV"
+
+          # Resumo no GitHub Actions
+          {
+            echo "## ${OVERALL_ICON} Resumo do Pipeline de Deploy"
+            echo ""
+            echo "| Job | Resultado |"
+            echo "|-----|-----------|"
+            echo "| Testes | $TEST_RESULT |"
+            echo "| Build | $BUILD_RESULT |"
+            echo "| Deploy | $DEPLOY_RESULT |"
+            echo ""
+            echo "URL publicada: $PAGE_URL_TXT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 📧 Enviar e-mail de status (único)
+        if: env.RECIPIENT != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ env.EMAIL_SUBJECT }}
+          to: ${{ env.RECIPIENT }}
+          from: ${{ secrets.NOTIFICATION_FROM }}
+          body: ${{ env.EMAIL_BODY }}
+
+      - name: ⚠️ Aviso — e-mail não enviado
+        if: env.RECIPIENT == ''
+        run: |
+          echo "::warning::E-mail não enviado: configure o secret NOTIFICATION_EMAIL ou disponibilize o email público no perfil GitHub do owner."
+          echo "## ⚠️ Email não enviado" >> "$GITHUB_STEP_SUMMARY"
+          echo "Defina o secret NOTIFICATION_EMAIL para garantir o envio." >> "$GITHUB_STEP_SUMMARY"

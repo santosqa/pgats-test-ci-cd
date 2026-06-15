@@ -1,0 +1,72 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CI — Testes Unitários (primeira linha de defesa)
+#
+# Disparo: push e pull_request para dev e main.
+# Foco: feedback rápido. NÃO executa testes E2E (ver testes-automatizados.yml).
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: 🧪 CI - Testes Unitários
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+concurrency:
+  group: ci-unit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: ✅ Testes unitários
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: 📦 Instalar dependências
+        run: npm ci
+
+      - name: 📂 Gerar catálogo de produtos
+        run: npm run build:catalog
+
+      - name: 🧪 Executar testes unitários com cobertura
+        id: unit_tests
+        run: |
+          mkdir -p reports
+          npm run test:unit:ci -- --runInBand
+        env:
+          JEST_JUNIT_OUTPUT_DIR: '.'
+          JEST_JUNIT_OUTPUT_NAME: 'junit.xml'
+
+      - name: 📋 Publicar relatório de testes (Test Reporter)
+        if: always()
+        uses: dorny/test-reporter@v3
+        with:
+          name: 'Relatório Jest'
+          path: 'junit.xml'
+          reporter: jest-junit
+          fail-on-error: false
+
+      - name: 📁 Upload artefatos de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report-${{ github.run_number }}
+          path: |
+            coverage/
+            junit.xml
+          retention-days: 30
+          if-no-files-found: warn

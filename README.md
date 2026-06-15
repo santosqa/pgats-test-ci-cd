@@ -2,7 +2,9 @@
 
 Site estatico de vendas. Criado para uso como projeto de estudo em testes automatizados, CI/CD com GitHub Actions e deploy no GitHub Pages.
 
-[![GitHub](https://img.shields.io/badge/GitHub-Acessar%20O%20Projeto-%2350fa7b?style=for-the-badge&logo=github&logoColor=white)](https://santosqa.github.io/pgats-test-ci-cd/)
+<a href="https://santosqa.github.io/pgats-test-ci-cd/" target="_blank" rel="noopener noreferrer">
+  <img src="https://img.shields.io/badge/GitHub-Acessar%20O%20Projeto-%2350fa7b?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
+</a>
 
 ---
 

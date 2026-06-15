@@ -1,0 +1,70 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Execução Manual
+#
+# Gatilho workflow_dispatch com inputs para escolher o que rodar:
+#   - "testes"        -> apenas testes-automatizados.yml
+#   - "deploy"        -> apenas deploy-pages.yml (que já inclui testes + email)
+#   - "testes+deploy" -> roda os testes e, se passarem, dispara o deploy
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: 🎚️ Execução Manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: 'O que deseja executar?'
+        required: true
+        type: choice
+        default: 'testes'
+        options:
+          - 'testes'
+          - 'deploy'
+          - 'testes+deploy'
+      debug:
+        description: 'Ativar modo verbose extra (apenas testes)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  pages: write
+  id-token: write
+
+jobs:
+  # ── Executa apenas os testes (reutilizando o fluxo central) ───────────────
+  testes:
+    name: 🧪 Executar testes
+    if: ${{ inputs.acao == 'testes' || inputs.acao == 'testes+deploy' }}
+    uses: ./.github/workflows/testes-automatizados.yml
+    with:
+      debug: ${{ inputs.debug == 'true' }}
+    secrets: inherit
+
+  # ── Dispara o fluxo de deploy (que executa seus próprios testes + email) ──
+  deploy:
+    name: 🚀 Disparar deploy
+    needs: testes
+    if: |
+      always() &&
+      (inputs.acao == 'deploy' ||
+       (inputs.acao == 'testes+deploy' && needs.testes.result == 'success'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Disparar workflow de Deploy — GitHub Pages
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-pages.yml',
+              ref: context.ref,
+            })

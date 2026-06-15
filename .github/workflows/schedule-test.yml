@@ -1,11 +1,19 @@
-name: Schedule Test
+name: 🕘 Schedule - Execução de Testes
 
 on:
   schedule:
-    - cron: "*/07 * * * *"
-  
+    - cron: '43 2 * * *'
+
+  workflow_dispatch:
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
+      - name: Diagnóstico
+        run: |
+          echo "Evento: ${{ github.event_name }}"
+          date -u
+
       - run: echo "schedule funcionando"

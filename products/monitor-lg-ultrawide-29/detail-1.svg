@@ -1,0 +1,11 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4dcfff;stop-opacity:0.1" />
+      <stop offset="100%" style="stop-color:#2eb8d4;stop-opacity:0.05" />
+    </linearGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#g)"/>
+  <text x="150" y="140" font-size="48" text-anchor="middle" fill="#2eb8d4">📏</text>
+  <text x="150" y="200" font-size="12" font-weight="600" text-anchor="middle" fill="#1a7d8f">Proporção</text>
+</svg>

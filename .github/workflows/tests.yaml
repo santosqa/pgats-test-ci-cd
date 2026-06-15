@@ -1,0 +1,326 @@
+# Pipeline de Testes Automatizados - Ricardo Santos
+#
+# CI Executado em:
+#   • push para main ou develop
+#   • pull_request contra main ou develop
+#   • disparo manual (workflow_dispatch)
+#   • agendamento aos domingos, segundas e terças às 20h (America/Sao_Paulo)
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: 🧪 Testes Automatizados
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+      - develop
+
+  # Execução manual pelo GitHub UI ou API
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Ativar modo verbose extra'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+  schedule:
+    # 23:20 UTC = 20:20 Horário de Brasília
+    # Dias: 0 (Domingo), 1 (Segunda), 3 (Quarta)
+    # Mês: 6 (Junho) (Deixei execução apenas no mes 6. pois se eu esquecer de desligar após validação do trabalho, a partir do mês seguinte ele não executa mais, evitando execuções indesejadas no futuro. Até chegar mes 6 de 2027 kkk )
+    - cron: '44 23 * 6 0,1,3'
+
+# ── Permissões mínimas necessárias ────────────────────────────────────────────
+permissions:
+  contents: read # checkout do repositório
+  checks: write # publicar resultado de testes na aba Checks
+  pull-requests: write # comentar resultado em PRs
+
+# ── Cancelar execuções duplicadas no mesmo branch/PR ──────────────────────────
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Jobs ──────────────────────────────────────────────────────────────────────
+jobs:
+  test:
+    name: Executar testes e gerar relatório
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Código-fonte
+      - name: 📥 Checkout código
+        uses: actions/checkout@v6
+
+      # 2. Ambiente Node.js com cache automático do npm
+      - name: 🟢 Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      # 3. Instalar dependências
+      #    Usamos "npm install" (em vez de "npm ci") porque o projeto evolui
+      #    com frequência e o lockfile pode ficar temporariamente desatualizado
+      #    em relação ao package.json. "npm install" resolve e atualiza o
+      #    lockfile automaticamente, evitando falhas de sincronia no CI.
+      - name: 📦 Instalar dependências
+        run: npm install
+
+      - name: 📂 Gerar catálogo de produtos
+        run: npm run build:catalog
+
+      # 4. Testes unitários + cobertura + relatório JUnit
+      #    continue-on-error garante que os passos seguintes (publicação do
+      #    relatório e upload de artefatos) executem mesmo se algum teste falhar.
+      #    A falha real do job é refletida no step "Resultado final dos testes".
+      - name: 🧪 Executar testes unitários com cobertura
+        id: unit_tests
+        continue-on-error: true
+        run: |
+          mkdir -p reports
+          EXTRA=""
+          if [ "${{ github.event.inputs.debug }}" = "true" ]; then EXTRA="--verbose"; fi
+          npm run test:unit:ci -- --runInBand $EXTRA
+        env:
+          JEST_JUNIT_OUTPUT_DIR: '.'
+          JEST_JUNIT_OUTPUT_NAME: 'junit.xml'
+
+      # 5. Publica o relatório JUnit na aba "Checks" do GitHub
+      - name: 📋 Publicar relatório de testes (Test Reporter)
+        if: always() # executa mesmo se os testes falharem
+        uses: dorny/test-reporter@v3
+        with:
+          name: 'Relatório Jest'
+          path: 'junit.xml'
+          reporter: jest-junit
+          fail-on-error: false # não re-falha; o step "Resultado final" já sinaliza a falha
+
+      - name: 🎭 Instalar navegadores do Playwright
+        id: playwright_install
+        continue-on-error: true
+        run: npx playwright install --with-deps chromium
+
+      # 6. Testes funcionais Playwright
+      - name: 🎭 Executar testes funcionais
+        id: functional_tests
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ "${{ steps.playwright_install.outcome }}" != "success" ]; then
+            echo "Instalação do Playwright falhou; marcando testes funcionais como falha para manter relatório, artefatos e email."
+            exit 1
+          fi
+          npm run test:functional
+
+      - name: 📋 Publicar relatório funcional (Playwright)
+        if: always()
+        uses: dorny/test-reporter@v3
+        with:
+          name: 'Relatório Playwright'
+          path: 'reports/functional-junit.xml'
+          reporter: java-junit
+          fail-on-error: false
+
+      # 7. Resumo claro no GitHub Step Summary
+      - name: 📊 Resumo dos totais no Step Summary
+        if: always()
+        env:
+          UNIT_OUTCOME: ${{ steps.unit_tests.outcome }}
+          FUNCTIONAL_OUTCOME: ${{ steps.functional_tests.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/ci_test_summary.js
+
+      # 8. Artefatos: relatório de cobertura, JUnit XML e Playwright HTML
+      #    Retidos por 30 dias; baixáveis na aba "Artifacts" da execução
+      - name: 📁 Upload artefatos de teste
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-report-${{ github.run_number }}
+          path: |
+            coverage/
+            junit.xml
+            reports/
+            playwright-report/
+            test-results/
+          retention-days: 30
+          if-no-files-found: warn
+
+      # 9. Comentário automático em Pull Requests
+      - name: 💬 Comentar resultado no PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const unitSuccess = '${{ steps.unit_tests.outcome }}' === 'success';
+            const functionalSuccess = '${{ steps.functional_tests.outcome }}' === 'success';
+            const success = unitSuccess && functionalSuccess;
+            const icon    = success ? '✅' : '❌';
+            const status  = success ? 'PASSOU' : 'FALHOU';
+            const sha     = context.sha.substring(0, 7);
+            const run     = '${{ github.run_number }}';
+
+            const body = [
+              `## ${icon} Testes Automatizados — ${status}`,
+              '',
+              `| Campo | Valor |`,
+              `|-------|-------|`,
+              `| Status  | **${status}** |`,
+              `| Unitários | ${unitSuccess ? 'PASSOU' : 'FALHOU'} |`,
+              `| Funcionais | ${functionalSuccess ? 'PASSOU' : 'FALHOU'} |`,
+              `| Commit  | \`${sha}\` |`,
+              `| Execução | [#${run}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |`,
+              '',
+              success
+                ? '> Os testes foram executados e **todos passaram**. O relatório de cobertura está disponível nos artefatos da execução.'
+                : '> ⚠️ Um ou mais testes **falharam**. Revise os logs antes de realizar o merge.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              body,
+            });
+
+      # 10. Notificação por email
+      #    Para enviar ao email privado do dono do repositório, configure
+      #    NOTIFICATION_EMAIL nos secrets. Se não existir, a pipeline tenta usar
+      #    o email público do perfil GitHub do owner do repositório.
+      - name: 📧 Enviar notificação por email
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+          NOTIFICATION_FROM: ${{ secrets.NOTIFICATION_FROM }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          UNIT_OUTCOME: ${{ steps.unit_tests.outcome }}
+          FUNCTIONAL_OUTCOME: ${{ steps.functional_tests.outcome }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SERVER_URL: ${{ github.server_url }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$SMTP_HOST" ] || [ -z "$SMTP_USERNAME" ] || [ -z "$SMTP_PASSWORD" ]; then
+            echo "::warning::Notificação por email ignorada: configure SMTP_HOST, SMTP_USERNAME e SMTP_PASSWORD nos secrets do repositório."
+            echo "## ⚠️ Email não enviado" >> $GITHUB_STEP_SUMMARY
+            echo "Secrets SMTP ausentes (SMTP_HOST/SMTP_USERNAME/SMTP_PASSWORD)." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import os
+          import json
+          import smtplib
+          import ssl
+          import urllib.request
+          from email.message import EmailMessage
+
+          def resolve_recipient():
+            configured = os.environ.get("NOTIFICATION_EMAIL", "").strip()
+            if configured:
+              return configured
+
+            owner = os.environ["REPOSITORY_OWNER"]
+            token = os.environ.get("GITHUB_TOKEN", "")
+            request = urllib.request.Request(
+              f"https://api.github.com/users/{owner}",
+              headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+              },
+            )
+
+            try:
+              with urllib.request.urlopen(request, timeout=10) as response:
+                profile = json.load(response)
+            except Exception as error:
+              print(f"Não foi possível consultar email público do owner {owner}: {error}")
+              return ""
+
+            return (profile.get("email") or "").strip()
+
+          recipient = resolve_recipient()
+          if not recipient:
+              print(
+                  "Notificação por email ignorada: o email público do dono do repositório "
+                  "não está disponível. Configure o secret NOTIFICATION_EMAIL com o email da conta."
+              )
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                  f.write("## ⚠️ Email não enviado\nSecret NOTIFICATION_EMAIL ausente e email público indisponível.\n")
+              raise SystemExit(0)
+
+          unit_outcome = os.environ["UNIT_OUTCOME"]
+          functional_outcome = os.environ["FUNCTIONAL_OUTCOME"]
+          passed = unit_outcome == "success" and functional_outcome == "success"
+          status = "PASSOU" if passed else "FALHOU"
+          icon = "✅" if passed else "❌"
+          repo = os.environ["REPOSITORY"]
+          run_url = f'{os.environ["SERVER_URL"]}/{repo}/actions/runs/{os.environ["RUN_ID"]}'
+          commit = os.environ["COMMIT_SHA"][:7]
+
+          message = EmailMessage()
+          message["Subject"] = f"{icon} Testes Automatizados - {status} - {repo} #{os.environ['RUN_NUMBER']}"
+          message["From"] = os.environ.get("NOTIFICATION_FROM") or os.environ["SMTP_USERNAME"]
+          message["To"] = recipient
+          message.set_content(f"""Resultado dos Testes Automatizados: {status}
+
+          Repositório: {repo}
+          Execução: #{os.environ["RUN_NUMBER"]}
+          Trigger: {os.environ["EVENT_NAME"]}
+          Branch: {os.environ["REF_NAME"]}
+          Commit: {commit}
+          Unitários: {unit_outcome}
+          Funcionais: {functional_outcome}
+
+          Relatório da execução:
+          {run_url}
+
+          A cobertura e o junit.xml ficam disponíveis nos artefatos da pipeline.
+          """)
+
+          host = os.environ["SMTP_HOST"]
+          port = int(os.environ.get("SMTP_PORT") or "587")
+          username = os.environ["SMTP_USERNAME"]
+          password = os.environ["SMTP_PASSWORD"]
+
+          if port == 465:
+            with smtplib.SMTP_SSL(host, port, context=ssl.create_default_context()) as smtp:
+              smtp.login(username, password)
+              smtp.send_message(message)
+          else:
+            with smtplib.SMTP(host, port) as smtp:
+              smtp.starttls(context=ssl.create_default_context())
+              smtp.login(username, password)
+              smtp.send_message(message)
+          PY
+
+      # 11. Resultado final: faz o job falhar de fato se os testes falharam.
+      #    Executado por último para garantir que relatório, resumo, artefatos
+      #    comentário no PR e email já tenham sido publicados antes do job falhar.
+      - name: 🚦 Resultado final dos testes
+        if: always()
+        run: |
+          if [ "${{ steps.unit_tests.outcome }}" != "success" ] || [ "${{ steps.functional_tests.outcome }}" != "success" ]; then
+            echo "❌ Uma etapa de testes falhou. Verifique o relatório e os artefatos publicados."
+            exit 1
+          fi
+          echo "✅ Testes unitários e funcionais executados com sucesso."

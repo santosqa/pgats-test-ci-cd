@@ -10,9 +10,6 @@
 name: 🧪 Testes Automatizados
 
 on:
-  schedule:
-    - cron: '*/07 * * * *'
-
   workflow_dispatch:
     inputs:
       debug:

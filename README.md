@@ -2,13 +2,15 @@
 
 Site estatico de vendas. Criado para uso como projeto de estudo em testes automatizados, CI/CD com GitHub Actions e deploy no GitHub Pages.
 
+[![GitHub](https://img.shields.io/badge/GitHub-Acessar%20O%20Projeto-%2350fa7b?style=for-the-badge&logo=github&logoColor=white)](https://santosqa.github.io/pgats-test-ci-cd/)
+
 ---
 
 ## Clonar o projeto
 
 ```bash
-git clone <URL_DO_REPOSITORIO>
-cd pgats-test-ci
+git clone https://github.com/santosqa/pgats-test-ci-cd.git
+cd pgats-test-ci-cd
 ```
 
 ## O Que Precisa Instalar

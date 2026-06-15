@@ -8,7 +8,7 @@
 #   • deploy-pages.yml
 #
 # Expõe outputs com o resultado dos testes unitários e funcionais para que
-# o workflow chamador monte o e-mail de status consolidado.
+# também o workflow chamador monte o e-mail de status consolidado.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: 🧪 Testes Automatizados (E2E)

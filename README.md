@@ -151,7 +151,7 @@ Push para main / Manual / Schedule
         └──▶  deploy-pages.yml      ─┘
                     │
                     ▼
-              test ──▶ build ──▶ deploy ──▶ notify (e-mail único)
+              test ──▶ build ──▶ deploy ──▶ notify (e-mail)
 ```
 
 ---
@@ -215,7 +215,7 @@ Garante que steps como upload de artefatos, Step Summary e comentário em PR rod
 **Quando roda:** agendamento via `cron` + `workflow_dispatch`.  
 **Objetivo:** disparar a suite de testes sem duplicar steps — apenas chama `testes-automatizados.yml` via `workflow_call`.
 
-**Cron configurado:**
+**Cron exemplo:**
 
 ```yaml
 schedule:

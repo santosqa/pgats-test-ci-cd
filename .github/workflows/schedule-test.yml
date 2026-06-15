@@ -1,19 +1,32 @@
 name: 🕘 Schedule - Execução de Testes
 
+permissions:
+  actions: write
+  contents: read
+
 on:
   schedule:
-    - cron: '43 2 * * *'
+    - cron: '43 5 * * *'
+    - cron: '28 12 * * *'
 
   workflow_dispatch:
 
 jobs:
-  test:
+  trigger-tests:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Diagnóstico
-        run: |
-          echo "Evento: ${{ github.event_name }}"
-          date -u
-
-      - run: echo "schedule funcionando"
+      - name: Disparar workflow principal
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'tests.yml',
+              ref: 'main',
+              inputs: {
+                debug: 'false'
+              }
+            })
